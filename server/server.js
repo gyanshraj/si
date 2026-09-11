@@ -5,9 +5,10 @@ const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const PORT = process.env.PORT || 3000;
-const ROOT = __dirname;
-const DATA_FILE = path.join(ROOT, 'data.json');
-const DB_FILE = process.env.DATABASE_FILE || path.join(ROOT, 'vah-health.db');
+const ROOT = path.join(__dirname, '..', 'public');     // static files
+const DATA_DIR = path.join(__dirname, '..', 'data');   // runtime data
+const DATA_FILE = path.join(DATA_DIR, 'data.json');    // legacy JSON migration
+const DB_FILE = process.env.DATABASE_FILE || path.join(DATA_DIR, 'vah-health.db');
 const sessions = new Map();
 
 const database = new DatabaseSync(DB_FILE);

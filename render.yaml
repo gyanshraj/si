@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: starter
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: node server/server.js
     envVars:
       - key: DATABASE_FILE
         value: /var/data/vah-health.db

@@ -1,1 +1,9 @@
 data.json
+node_modules/
+
+# SQLite runtime database (generated at startup)
+*.db
+*.db-shm
+*.db-wal
+data/
+!data/.gitkeep
