@@ -184,6 +184,40 @@ function handleApi(request, response, pathname) {
     return sendJson(response, 200, { token, user: userResponse(user), state: user.state });
   }
 
+  if (request.method === 'GET' && pathname === '/api/leaderboard') {
+    const rows = database.prepare('SELECT email, name, state_json FROM users').all();
+    const entries = rows.map(row => {
+      const state = row.state_json ? (() => { try { return JSON.parse(row.state_json); } catch { return null; } })() : null;
+      const logs = (state && Array.isArray(state.logs)) ? state.logs : [];
+      const verifiedLogs = logs.filter(l => l.proofStatus === 'verified');
+      const totalLogs = logs.length;
+      const streak = verifiedLogs.length;
+      const avgGoal = totalLogs > 0
+        ? Math.round(logs.reduce((s, l) => s + (Number(l.goalPercent) || 0), 0) / totalLogs)
+        : 0;
+      const refundEarned = logs.reduce((s, l) => s + (Number(l.refundEarned) || 0), 0);
+      const totalSteps = logs.reduce((s, l) => s + (Number(l.steps) || 0), 0);
+      const totalWorkoutMins = logs.reduce((s, l) => s + (Number(l.workoutMins) || 0), 0);
+      const depositAmount = state ? (Number(state.depositAmount) || 0) : 0;
+      // Score: weighted composite (streak 40%, avgGoal 35%, refund density 25%)
+      const score = streak * 40 + avgGoal * 0.35 + (depositAmount > 0 ? (refundEarned / depositAmount) * 2500 : 0);
+      return {
+        name: row.name,
+        email: row.email,
+        totalLogs,
+        streak,
+        avgGoal,
+        refundEarned: Math.round(refundEarned * 100) / 100,
+        totalSteps,
+        totalWorkoutMins,
+        depositAmount,
+        score: Math.round(score)
+      };
+    });
+    entries.sort((a, b) => b.score - a.score || b.streak - a.streak);
+    return sendJson(response, 200, { leaderboard: entries, updatedAt: new Date().toISOString() });
+  }
+
   return sendJson(response, 404, { error: 'API route not found.' });
 }
 

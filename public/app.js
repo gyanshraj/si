@@ -382,6 +382,7 @@ function updateViewVisibility() {
     if (userAvatarInitial) userAvatarInitial.textContent = name.charAt(0).toUpperCase();
 
     renderApp();
+    startLeaderboard();
   } else {
     // Logged out: show public landing page, hide private dashboard
     if (publicView) publicView.classList.remove('hidden');
@@ -390,6 +391,7 @@ function updateViewVisibility() {
     if (authActions) authActions.classList.add('hidden');
     if (escrowBadge) escrowBadge.classList.add('hidden');
     if (publicNavLinks) publicNavLinks.classList.remove('hidden');
+    stopLeaderboard();
   }
 }
 
@@ -1229,4 +1231,208 @@ function setupEventListeners() {
       });
     });
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// LEADERBOARD
+// ─────────────────────────────────────────────────────────────
+
+let _lbRefreshTimer   = null;  // setInterval for auto-refresh countdown
+let _lbCountdown      = 30;    // seconds until next fetch
+let _lbClockInterval  = null;  // setInterval for the header clock
+
+const TROPHY_MAP = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const RANK_CLASS = { 1: 'gold', 2: 'silver', 3: 'bronze' };
+
+/** Show shimmer skeleton while data loads */
+function _lbShowSkeleton() {
+  const podium = document.getElementById('lb-podium');
+  const rows   = document.getElementById('lb-rows');
+  if (!podium || !rows) return;
+
+  // Podium skeleton: three placeholder cards
+  podium.innerHTML = [1, 2, 3].map(() => `
+    <div class="lb-podium-card">
+      <div class="lb-skeleton-cell" style="width:36px;height:36px;border-radius:50%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:80px;margin:.5rem auto 0;"></div>
+      <div class="lb-skeleton-cell" style="width:50px;margin:.3rem auto 0;height:10px;"></div>
+    </div>`).join('');
+
+  // Table skeleton: 5 rows
+  rows.innerHTML = Array.from({ length: 5 }).map((_, i) => `
+    <div class="lb-skeleton-row" style="animation-delay:${i * 80}ms">
+      <div class="lb-skeleton-cell" style="width:32px;height:32px;border-radius:50%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:65%;margin-left:.5rem;"></div>
+      <div class="lb-skeleton-cell" style="width:60%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:60%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:70%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:60%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:65%;margin:0 auto;"></div>
+      <div class="lb-skeleton-cell" style="width:50%;margin:0 auto;"></div>
+    </div>`).join('');
+}
+
+/** Build the top-3 podium cards */
+function _lbRenderPodium(top3) {
+  // Reorder to 2–1–3 for visual podium layout
+  const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+  return order.map(entry => {
+    const rank = entry._rank;
+    const initial = (entry.name || '?').charAt(0).toUpperCase();
+    const delay = rank === 1 ? '.1s' : rank === 2 ? '0s' : '.2s';
+    return `
+      <div class="lb-podium-card" data-rank="${rank}" style="animation-delay:${delay}">
+        <div class="lb-trophy" style="--lb-delay:${delay}">${TROPHY_MAP[rank] || rank}</div>
+        <div class="lb-podium-avatar">${initial}</div>
+        <div class="lb-podium-name" title="${entry.name}">${entry.name}</div>
+        <div class="lb-podium-score">${entry.score} pts</div>
+        <div class="lb-podium-stats">
+          <span class="lb-mini-stat">🔥 ${entry.streak}d streak</span>
+          <span class="lb-mini-stat">🎯 ${entry.avgGoal}% goal</span>
+          ${entry.refundEarned > 0 ? `<span class="lb-mini-stat">💰 ₹${entry.refundEarned.toLocaleString()}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/** Build a single leaderboard table row */
+function _lbRenderRow(entry, maxScore, delay) {
+  const rank     = entry._rank;
+  const initial  = (entry.name || '?').charAt(0).toUpperCase();
+  const barPct   = maxScore > 0 ? Math.round((entry.score / maxScore) * 100) : 0;
+  const rankClass= RANK_CLASS[rank] || '';
+  const rankLabel= rank <= 3 ? TROPHY_MAP[rank] : `#${rank}`;
+  const isMe     = AUTH_STATE.user && AUTH_STATE.user.email === entry.email;
+
+  const stepsK   = entry.totalSteps > 0
+    ? (entry.totalSteps >= 1000 ? (entry.totalSteps / 1000).toFixed(1) + 'k' : entry.totalSteps)
+    : '—';
+  const workH    = entry.totalWorkoutMins > 0
+    ? (entry.totalWorkoutMins >= 60 ? (entry.totalWorkoutMins / 60).toFixed(1) + 'h' : entry.totalWorkoutMins + 'm')
+    : '—';
+
+  return `
+    <div class="lb-row${isMe ? ' lb-row-me' : ''}" style="--lb-row-delay:${delay}ms">
+      <div>
+        <div class="lb-rank-badge ${rankClass}">${rankLabel}</div>
+      </div>
+      <div class="lb-name-cell">
+        <div class="lb-row-avatar">${initial}</div>
+        <div>
+          <div class="lb-name-text">${entry.name}${isMe ? ' <span style="font-size:.62rem;background:#e0f2f1;color:#00695c;padding:.1rem .35rem;border-radius:4px;font-weight:700;">You</span>' : ''}</div>
+          <div class="lb-email-text">${entry.totalLogs} log${entry.totalLogs !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <div class="lb-stat-cell">
+        ${entry.streak > 0 ? entry.streak : '—'}
+        <div class="lb-stat-sub">${entry.streak > 0 ? 'days' : 'no data'}</div>
+      </div>
+      <div class="lb-stat-cell">
+        ${entry.avgGoal > 0 ? entry.avgGoal + '%' : '—'}
+      </div>
+      <div class="lb-stat-cell">
+        ${stepsK}
+        <div class="lb-stat-sub">${entry.totalLogs > 0 ? 'total' : ''}</div>
+      </div>
+      <div class="lb-stat-cell">
+        ${workH}
+      </div>
+      <div class="lb-stat-cell lb-col-refund">
+        ${entry.refundEarned > 0 ? '₹' + entry.refundEarned.toLocaleString() : '—'}
+      </div>
+      <div class="lb-stat-cell lb-col-score">
+        <div style="font-weight:800;">${entry.score}</div>
+        <div class="lb-score-bar-wrap">
+          <div class="lb-score-bar-fill" style="--bar-w:${barPct}%;animation-delay:${delay}ms"></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/** Main fetch + render */
+async function fetchLeaderboard() {
+  const btn = document.getElementById('lb-refresh-btn');
+  if (btn) btn.classList.add('spinning');
+
+  _lbShowSkeleton();
+
+  try {
+    const data = await apiRequest('/leaderboard', { method: 'GET' });
+    const list  = (data.leaderboard || []).map((e, i) => ({ ...e, _rank: i + 1 }));
+
+    const podiumEl = document.getElementById('lb-podium');
+    const rowsEl   = document.getElementById('lb-rows');
+    if (!podiumEl || !rowsEl) return;
+
+    // Podium (top 3)
+    if (list.length === 0) {
+      podiumEl.innerHTML = `
+        <div class="lb-empty-state" style="grid-column:1/-1">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <p>No users yet — be the first to register!</p>
+        </div>`;
+      rowsEl.innerHTML = '';
+    } else {
+      const maxScore = list[0] ? list[0].score : 1;
+      podiumEl.innerHTML = _lbRenderPodium(list.slice(0, 3));
+      rowsEl.innerHTML   = list.map((e, i) => _lbRenderRow(e, maxScore, i * 60)).join('');
+    }
+
+    // Reset countdown
+    _lbCountdown = 30;
+    _updateCountdownLabel();
+  } catch (err) {
+    const rowsEl = document.getElementById('lb-rows');
+    if (rowsEl) rowsEl.innerHTML = `
+      <div class="lb-empty-state">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <p>Could not load leaderboard — server may be offline.</p>
+      </div>`;
+    const podiumEl = document.getElementById('lb-podium');
+    if (podiumEl) podiumEl.innerHTML = '';
+  } finally {
+    if (btn) btn.classList.remove('spinning');
+  }
+}
+
+function _updateCountdownLabel() {
+  const el = document.getElementById('lb-next-refresh');
+  if (el) el.textContent = `Refreshing in ${_lbCountdown}s`;
+}
+
+/** Start the leaderboard clock + auto-refresh loop */
+function startLeaderboard() {
+  // Live clock in leaderboard header
+  if (_lbClockInterval) clearInterval(_lbClockInterval);
+  _lbClockInterval = setInterval(() => {
+    const el = document.getElementById('lb-clock');
+    if (el) {
+      const now = new Date();
+      el.textContent = now.toLocaleTimeString();
+    }
+  }, 1000);
+  // Trigger clock immediately
+  const clockEl = document.getElementById('lb-clock');
+  if (clockEl) clockEl.textContent = new Date().toLocaleTimeString();
+
+  // Auto-refresh countdown
+  if (_lbRefreshTimer) clearInterval(_lbRefreshTimer);
+  _lbCountdown = 30;
+  _lbRefreshTimer = setInterval(() => {
+    _lbCountdown--;
+    _updateCountdownLabel();
+    if (_lbCountdown <= 0) {
+      _lbCountdown = 30;
+      fetchLeaderboard();
+    }
+  }, 1000);
+
+  // Initial fetch
+  fetchLeaderboard();
+}
+
+/** Stop polling when user logs out */
+function stopLeaderboard() {
+  if (_lbRefreshTimer)   { clearInterval(_lbRefreshTimer);  _lbRefreshTimer = null; }
+  if (_lbClockInterval)  { clearInterval(_lbClockInterval); _lbClockInterval = null; }
 }

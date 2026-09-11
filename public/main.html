@@ -445,6 +445,65 @@
         </button>
       </section>
 
+      <!-- ═══════════════════════════════════════════════════════
+           LEADERBOARD SECTION
+           ═══════════════════════════════════════════════════════ -->
+      <section class="leaderboard-section" id="leaderboard-section">
+
+        <!-- Section header -->
+        <div class="lb-header">
+          <div class="lb-header-left">
+            <div class="lb-icon-wrap">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </div>
+            <div>
+              <h2 class="lb-title">Student Leaderboard</h2>
+              <p class="lb-subtitle">Live rankings across all VAH Health participants</p>
+            </div>
+          </div>
+          <div class="lb-header-right">
+            <div class="lb-live-badge">
+              <span class="lb-pulse-dot"></span>
+              <span>Live</span>
+            </div>
+            <div class="lb-clock" id="lb-clock">--:--:--</div>
+            <div class="lb-refresh-wrap">
+              <span class="lb-next-refresh" id="lb-next-refresh">Refreshing in 30s</span>
+              <button class="lb-refresh-btn" id="lb-refresh-btn" onclick="fetchLeaderboard()" title="Refresh now">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Podium (top 3) -->
+        <div class="lb-podium" id="lb-podium">
+          <!-- Rendered by JS -->
+        </div>
+
+        <!-- Full ranked list -->
+        <div class="lb-table-wrap">
+          <div class="lb-table-head">
+            <span class="lb-col-rank">Rank</span>
+            <span class="lb-col-name">Student</span>
+            <span class="lb-col-stat">🔥 Streak</span>
+            <span class="lb-col-stat">🎯 Avg Goal</span>
+            <span class="lb-col-stat">👟 Steps</span>
+            <span class="lb-col-stat">💪 Workout</span>
+            <span class="lb-col-refund">💰 Refund</span>
+            <span class="lb-col-score">Score</span>
+          </div>
+          <div id="lb-rows">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <div class="lb-footer-note">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          Score = verified streak (×40) + avg goal completion (×0.35) + refund efficiency (×25%). Auto-refreshes every 30 seconds.
+        </div>
+      </section>
+
       <!-- Section Bar: 15-Column Health Tracking Matrix -->
       <div class="section-bar">
         <div class="section-title-wrap">
